@@ -459,28 +459,36 @@ tbody tr:hover {
   font-size: 13px;
 }
 
-.prediction-grid {
+.prediction-grid,
+.guardrail-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   margin-bottom: 16px;
 }
 
-.prediction-grid div {
+.guardrail-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.prediction-grid div,
+.guardrail-grid div {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
   min-height: 70px;
 }
 
-.prediction-grid span {
+.prediction-grid span,
+.guardrail-grid span {
   display: block;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.2;
 }
 
-.prediction-grid small {
+.prediction-grid small,
+.guardrail-grid small {
   display: block;
   margin-top: 8px;
   font-weight: 700;
@@ -574,6 +582,38 @@ tbody tr:hover {
   color: var(--muted);
 }
 
+.leaflet-control-layers {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.leaflet-control-layers label {
+  display: flex;
+  grid-template-columns: none;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.leaflet-control-layers input[type="checkbox"],
+.leaflet-control-layers input[type="radio"] {
+  width: 13px;
+  height: 13px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.leaflet-control-layers-overlays {
+  display: grid;
+  gap: 5px;
+}
+
 :root[data-theme="dark"] .leaflet-tile {
   filter: brightness(0.76) saturate(0.9);
 }
@@ -614,6 +654,14 @@ tbody tr:hover {
 
 .map-detail {
   min-height: 20px;
+}
+
+.listener-form {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
 }
 
 .packet {
@@ -669,6 +717,8 @@ tbody tr:hover {
   .moon-form,
   .moon-readouts,
   .prediction-grid,
+  .guardrail-grid,
+  .listener-form,
   .map-summary {
     grid-template-columns: repeat(2, 1fr);
   }

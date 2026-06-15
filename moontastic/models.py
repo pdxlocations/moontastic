@@ -37,6 +37,19 @@ CREATE TABLE IF NOT EXISTS packets (
     raw_json TEXT,
     FOREIGN KEY(test_id) REFERENCES tests(id)
 );
+
+CREATE TABLE IF NOT EXISTS listeners (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    callsign TEXT,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    elevation_m REAL NOT NULL DEFAULT 0,
+    rx_gain_dbi REAL NOT NULL DEFAULT 12,
+    rx_sensitivity_dbm REAL NOT NULL DEFAULT -137,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 

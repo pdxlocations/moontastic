@@ -18,6 +18,12 @@ const receptionFields = {
   best: document.querySelector("#map-best"),
   detail: document.querySelector("#map-detail"),
 };
+const guardFields = {
+  band: document.querySelector("#guard-band"),
+  eirp: document.querySelector("#guard-eirp"),
+  measured: document.querySelector("#guard-measured"),
+};
+const listenersBody = document.querySelector("#listeners-body");
 const moonFields = {
   az: document.querySelector("#moon-az"),
   el: document.querySelector("#moon-el"),
@@ -51,6 +57,7 @@ let lastReceptionMapAt = 0;
 let leafletMap = null;
 let receptionLayer = null;
 let stationLayer = null;
+let listenerLayer = null;
 const themeStorageKey = "moontastic-theme";
 
 function setTheme(theme) {
@@ -203,6 +210,16 @@ function initializeReceptionMap() {
 
   receptionLayer = L.layerGroup().addTo(leafletMap);
   stationLayer = L.layerGroup().addTo(leafletMap);
+  listenerLayer = L.layerGroup().addTo(leafletMap);
+  L.control.layers(
+    {},
+    {
+      "Opportunity grid": receptionLayer,
+      "Your TX station": stationLayer,
+      "Known listeners": listenerLayer,
+    },
+    { collapsed: false }
+  ).addTo(leafletMap);
 }
 
 function probabilityColor(probability, opacity = null) {
@@ -266,7 +283,7 @@ function updateReceptionDetail(point) {
     return;
   }
   const probability = Math.round(point.probability * 100);
-  receptionFields.detail.textContent = `${point.lat}, ${point.lon} - ${probability}% reception estimate, Moon elevation ${point.moon_elevation_deg} deg`;
+  receptionFields.detail.textContent = `${point.lat}, ${point.lon} - ${probability}% opportunity estimate, Moon elevation ${point.moon_elevation_deg} deg`;
 }
 
 function updateReceptionSummary(map) {
@@ -281,6 +298,59 @@ function updateReceptionSummary(map) {
     receptionFields.best.textContent = "None";
   }
   receptionFields.detail.textContent = map.assumption;
+}
+
+function updateGuardrails(guardrails = {}, measurements = {}) {
+  guardFields.band.textContent = guardrails.band || "-";
+  guardFields.eirp.textContent = guardrails.eirp_dbm === undefined
+    ? "-"
+    : `${guardrails.eirp_dbm} dBm / ${guardrails.eirp_w} W`;
+  guardFields.measured.textContent = measurements.packet_loss_percent === null || measurements.packet_loss_percent === undefined
+    ? "No packet history"
+    : `${measurements.packet_loss_percent}% loss`;
+}
+
+function renderListeners(listeners = []) {
+  listenersBody.innerHTML = "";
+  if (listenerLayer) {
+    listenerLayer.clearLayers();
+  }
+  if (!listeners.length) {
+    listenersBody.innerHTML = `<tr><td colspan="6">No listener stations yet</td></tr>`;
+    return;
+  }
+  for (const listener of listeners) {
+    const window = listener.next_windows && listener.next_windows[0];
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${listener.callsign || listener.name}<br><small>${listener.name}</small></td>
+      <td>${Math.round(listener.opportunity * 100)}%<br><small>${listener.verdict}</small></td>
+      <td>${listener.rx_moon_elevation_deg} deg</td>
+      <td>${listener.shared_visible ? "Now" : "No"}</td>
+      <td>${window ? `${fmtTime(window.start)} ${window.duration_minutes} min` : "None in 24h"}</td>
+      <td><button type="button" class="ghost delete-listener" data-id="${listener.id}">Delete</button></td>
+    `;
+    listenersBody.append(row);
+    if (listenerLayer) {
+      L.circleMarker([listener.latitude, listener.longitude], {
+        radius: 7,
+        color: probabilityColor(listener.opportunity, 0.95),
+        fillColor: probabilityColor(listener.opportunity, 0.45),
+        fillOpacity: 0.72,
+        opacity: 0.95,
+        weight: 2,
+      })
+        .bindTooltip(`${listener.callsign || listener.name}<br>${Math.round(listener.opportunity * 100)}% opportunity<br>${listener.verdict}`)
+        .addTo(listenerLayer);
+    }
+  }
+}
+
+async function refreshPlanning() {
+  const form = document.querySelector("#moon-form");
+  const planning = await requestJson(`/api/planning?${queryFromForm(form)}`);
+  renderListeners(planning.listeners);
+  updateGuardrails(planning.guardrails, planning.measurements);
 }
 
 async function refreshReceptionMap(force = false) {
@@ -379,6 +449,7 @@ async function refreshMoon() {
     ? `${prediction.window.best.elevation_deg} deg at ${fmtTime(prediction.window.best.at)}`
     : "-";
   moonFields.windowSet.textContent = fmtTime(prediction.window.next_set);
+  updateGuardrails(prediction.guardrails, prediction.measurements);
   positionMoonDot(moon);
   renderHorizon(prediction.window.samples);
 }
@@ -399,6 +470,7 @@ async function refreshStatus() {
   await loadTest(currentTestId);
   await refreshMoon();
   await refreshReceptionMap();
+  await refreshPlanning();
 }
 
 function describeConnection(info) {
@@ -503,15 +575,52 @@ document.querySelector("#ble-scan-btn").addEventListener("click", async () => {
 });
 
 document.querySelector("#moon-refresh-btn").addEventListener("click", () => {
-  refreshMoon().then(() => refreshReceptionMap(true)).catch(showError);
+  refreshMoon()
+    .then(() => refreshReceptionMap(true))
+    .then(refreshPlanning)
+    .catch(showError);
 });
 
 document.querySelector("#moon-form").addEventListener("change", () => {
-  refreshMoon().then(() => refreshReceptionMap(true)).catch(showError);
+  refreshMoon()
+    .then(() => refreshReceptionMap(true))
+    .then(refreshPlanning)
+    .catch(showError);
 });
 
 document.querySelector("#reception-refresh-btn").addEventListener("click", () => {
   refreshReceptionMap(true).catch(showError);
+});
+
+document.querySelector("#planning-refresh-btn").addEventListener("click", () => {
+  refreshPlanning().catch(showError);
+});
+
+document.querySelector("#listener-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await requestJson("/api/listeners", {
+      method: "POST",
+      body: JSON.stringify(formPayload(event.currentTarget)),
+    });
+    event.currentTarget.reset();
+    await refreshPlanning();
+  } catch (error) {
+    showError(error);
+  }
+});
+
+listenersBody.addEventListener("click", async (event) => {
+  const button = event.target.closest(".delete-listener");
+  if (!button) {
+    return;
+  }
+  try {
+    await requestJson(`/api/listeners/${button.dataset.id}`, { method: "DELETE" });
+    await refreshPlanning();
+  } catch (error) {
+    showError(error);
+  }
 });
 
 window.addEventListener("resize", () => {

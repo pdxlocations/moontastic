@@ -96,6 +96,151 @@ def reception_probability_map(
     }
 
 
+def rf_guardrails(link: LinkBudget) -> dict[str, Any]:
+    warnings = []
+    band = "custom"
+    if 902 <= link.frequency_mhz <= 928:
+        band = "US 915 MHz ISM"
+    elif 863 <= link.frequency_mhz <= 870:
+        band = "EU 868 MHz ISM"
+    elif 144 <= link.frequency_mhz <= 148:
+        band = "2 m amateur"
+        warnings.append("144-148 MHz is amateur VHF, not a normal Meshtastic LoRa band.")
+    else:
+        warnings.append("Frequency is outside common Meshtastic regional LoRa bands.")
+
+    eirp_dbm = link.tx_power_dbm + link.tx_gain_dbi
+    eirp_w = 10 ** ((eirp_dbm - 30) / 10)
+    if eirp_dbm > 36:
+        warnings.append("EIRP is above 36 dBm; expect a stronger local interference footprint.")
+    if link.tx_power_dbm > 30:
+        warnings.append("TX power is above 1 W; check radio heat, power supply headroom, and amplifier linearity.")
+
+    return {
+        "band": band,
+        "eirp_dbm": round(eirp_dbm, 1),
+        "eirp_w": round(eirp_w, 3),
+        "warnings": warnings,
+        "ok": not warnings,
+    }
+
+
+def listener_opportunity(
+    tx_station: Station,
+    listener: dict[str, Any],
+    link: LinkBudget,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    instant = normalize_time(now)
+    rx_station = Station(
+        latitude=float(listener["latitude"]),
+        longitude=float(listener["longitude"]),
+        elevation_m=float(listener.get("elevation_m") or 0),
+    )
+    listener_link = LinkBudget(
+        frequency_mhz=link.frequency_mhz,
+        tx_power_dbm=link.tx_power_dbm,
+        tx_gain_dbi=link.tx_gain_dbi,
+        rx_gain_dbi=float(listener.get("rx_gain_dbi") or link.rx_gain_dbi),
+        rx_sensitivity_dbm=float(listener.get("rx_sensitivity_dbm") or link.rx_sensitivity_dbm),
+        system_loss_db=link.system_loss_db,
+    )
+    tx_track = moon_topocentric(tx_station, instant)
+    rx_track = moon_topocentric(rx_station, instant)
+    tx_link = predict_link(tx_track, listener_link)
+    opportunity = reception_probability(tx_track, rx_track, tx_link)
+    windows = shared_visibility_windows(tx_station, rx_station, instant, hours=24, step_minutes=15)
+    result = dict(listener)
+    result.update(
+        {
+            "tx_moon_elevation_deg": tx_track["elevation_deg"],
+            "rx_moon_elevation_deg": rx_track["elevation_deg"],
+            "tx_visible": tx_track["visible"],
+            "rx_visible": rx_track["visible"],
+            "shared_visible": bool(tx_track["visible"] and rx_track["visible"]),
+            "opportunity": opportunity,
+            "margin_db": tx_link["margin_db"],
+            "verdict": opportunity_verdict(opportunity, tx_track["visible"], rx_track["visible"]),
+            "next_windows": windows[:3],
+        }
+    )
+    return result
+
+
+def listener_opportunities(
+    tx_station: Station,
+    listeners: list[dict[str, Any]],
+    link: LinkBudget,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    instant = normalize_time(now)
+    ranked = [listener_opportunity(tx_station, listener, link, instant) for listener in listeners]
+    ranked.sort(key=lambda item: (item["opportunity"], item["rx_moon_elevation_deg"]), reverse=True)
+    return {
+        "generated_at": instant.isoformat(timespec="seconds"),
+        "listeners": ranked,
+        "guardrails": rf_guardrails(link),
+    }
+
+
+def shared_visibility_windows(
+    tx_station: Station,
+    rx_station: Station,
+    start: datetime,
+    hours: int = 24,
+    step_minutes: int = 15,
+) -> list[dict[str, Any]]:
+    windows = []
+    current = None
+    steps = int(hours * 60 / step_minutes) + 1
+    for index in range(steps):
+        at = start + timedelta(minutes=index * step_minutes)
+        tx = moon_topocentric(tx_station, at)
+        rx = moon_topocentric(rx_station, at)
+        shared = bool(tx["visible"] and rx["visible"])
+        if shared and current is None:
+            current = {
+                "start": at,
+                "end": at,
+                "peak_rx_elevation_deg": rx["elevation_deg"],
+                "peak_tx_elevation_deg": tx["elevation_deg"],
+            }
+        elif shared and current:
+            current["end"] = at
+            current["peak_rx_elevation_deg"] = max(current["peak_rx_elevation_deg"], rx["elevation_deg"])
+            current["peak_tx_elevation_deg"] = max(current["peak_tx_elevation_deg"], tx["elevation_deg"])
+        elif current:
+            windows.append(format_window(current, start))
+            current = None
+    if current:
+        windows.append(format_window(current, start))
+    return windows
+
+
+def format_window(window: dict[str, Any], start: datetime) -> dict[str, Any]:
+    duration = (window["end"] - window["start"]).total_seconds() / 60
+    return {
+        "start": window["start"].isoformat(timespec="minutes"),
+        "end": window["end"].isoformat(timespec="minutes"),
+        "starts_in_hours": round((window["start"] - start).total_seconds() / 3600, 2),
+        "duration_minutes": round(duration),
+        "peak_rx_elevation_deg": round(window["peak_rx_elevation_deg"], 2),
+        "peak_tx_elevation_deg": round(window["peak_tx_elevation_deg"], 2),
+    }
+
+
+def opportunity_verdict(opportunity: float, tx_visible: bool, rx_visible: bool) -> str:
+    if not tx_visible:
+        return "Your Moon is below horizon"
+    if not rx_visible:
+        return "Listener Moon is below horizon"
+    if opportunity >= 0.65:
+        return "Strong shared window"
+    if opportunity >= 0.35:
+        return "Usable shared window"
+    return "Weak shared window"
+
+
 def reception_probability(tx_track: dict[str, Any], rx_track: dict[str, Any], tx_link: dict[str, Any]) -> float:
     if not tx_track["visible"] or not rx_track["visible"]:
         return 0.0

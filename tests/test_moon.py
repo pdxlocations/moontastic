@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from moontastic.moon import LinkBudget, Station, moon_prediction, reception_probability_map
+from moontastic.moon import LinkBudget, Station, listener_opportunities, moon_prediction, reception_probability_map, rf_guardrails
 
 
 def test_moon_prediction_has_tracking_and_link_fields():
@@ -48,3 +48,29 @@ def test_reception_probability_map_returns_bounded_grid():
     assert "moon_visible" in result["tx"]
     assert all(0 <= point["probability"] <= 1 for point in result["points"])
     assert all(point["probability"] == 0 for point in result["points"] if not point["visible"])
+
+
+def test_guardrails_note_vhf_and_high_eirp():
+    result = rf_guardrails(LinkBudget(frequency_mhz=144, tx_power_dbm=30, tx_gain_dbi=12))
+
+    assert result["band"] == "2 m amateur"
+    assert result["eirp_dbm"] == 42
+    assert result["warnings"]
+    assert "authorization" not in " ".join(result["warnings"]).lower()
+    assert "legal" not in " ".join(result["warnings"]).lower()
+
+
+def test_listener_opportunities_rank_known_stations():
+    result = listener_opportunities(
+        Station(latitude=45.5152, longitude=-122.6784),
+        [
+            {"id": 1, "name": "A", "latitude": 45.0, "longitude": -122.0, "rx_gain_dbi": 12, "rx_sensitivity_dbm": -137},
+            {"id": 2, "name": "B", "latitude": -80.0, "longitude": 90.0, "rx_gain_dbi": 12, "rx_sensitivity_dbm": -137},
+        ],
+        LinkBudget(tx_gain_dbi=20, rx_gain_dbi=20),
+        datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert len(result["listeners"]) == 2
+    assert result["listeners"][0]["opportunity"] >= result["listeners"][1]["opportunity"]
+    assert "next_windows" in result["listeners"][0]

@@ -1,6 +1,6 @@
 # Moontastic
 
-Moontastic is a small Flask app for automated Meshtastic moonbounce-style link testing. It sends numbered test packets through a Meshtastic node, records received packets, derives TX/RX latency and packet-loss summaries, and exposes a dashboard plus JSON API.
+Moontastic is a small Flask app for automated Meshtastic moonbounce-style link testing. It sends numbered test packets through a Meshtastic node, records received packets, derives TX/RX latency and packet-loss summaries, and exposes a planning dashboard plus JSON API.
 
 The app defaults to simulator mode so it can be developed without a radio attached. Optional serial, TCP/IP, and Bluetooth transports use the Python `meshtastic` package. The dashboard reception map uses Leaflet with OpenStreetMap tiles in the browser.
 
@@ -66,8 +66,12 @@ MOONTASTIC_INTERFACE=ble MOONTASTIC_BLE_ADDRESS=Meshtastic_1234 flask --app app 
 - `POST /api/connection` - connect using simulator, TCP/IP, serial, or Bluetooth. Body fields: `type`, `tcp_host`, `serial_port`, `ble_address`
 - `POST /api/connection/disconnect` - close the active interface
 - `GET /api/connection/ble/scan` - scan for Meshtastic BLE peripherals
-- `GET /api/moon` - live Moon pointing and reception prediction. Query fields: `lat`, `lon`, `elevation_m`, `frequency_mhz`, `tx_power_dbm`, `tx_gain_dbi`, `rx_gain_dbi`, `rx_sensitivity_dbm`
+- `GET /api/moon` - live Moon pointing, RF guardrails, measured packet summary, and reception prediction. Query fields: `lat`, `lon`, `elevation_m`, `frequency_mhz`, `tx_power_dbm`, `tx_gain_dbi`, `rx_gain_dbi`, `rx_sensitivity_dbm`
 - `GET /api/reception-map` - global relative EME reception-opportunity grid. Uses the same query fields as `/api/moon`, plus optional `step_degrees`
+- `GET /api/listeners` - known listener stations
+- `POST /api/listeners` - create a listener station. Body fields: `name`, `callsign`, `latitude`, `longitude`, `elevation_m`, `rx_gain_dbi`, `rx_sensitivity_dbm`, `notes`
+- `DELETE /api/listeners/<id>` - delete a listener station
+- `GET /api/planning` - ranked listener opportunities, shared Moon visibility windows, RF guardrails, and measured packet summary
 - `POST /api/tests` - start an automated test
 - `POST /api/tests/current/stop` - stop the active test
 - `GET /api/tests` - recent tests

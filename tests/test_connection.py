@@ -38,3 +38,29 @@ def test_reception_map_endpoint_returns_grid(tmp_path):
     assert payload["grid_step_degrees"] == 30
     assert payload["points"]
     assert 0 <= payload["coverage_percent"] <= 100
+
+
+def test_listener_crud_and_planning_endpoint(tmp_path):
+    os.environ["MOONTASTIC_DB"] = str(tmp_path / "test.sqlite3")
+    app = create_app()
+    client = app.test_client()
+
+    created = client.post(
+        "/api/listeners",
+        json={
+            "name": "Remote",
+            "callsign": "K7ABC",
+            "latitude": 45.0,
+            "longitude": -122.0,
+            "rx_gain_dbi": 14,
+            "rx_sensitivity_dbm": -138,
+        },
+    )
+    planning = client.get("/api/planning")
+    deleted = client.delete(f"/api/listeners/{created.get_json()['id']}")
+
+    assert created.status_code == 201
+    assert planning.status_code == 200
+    assert planning.get_json()["listeners"][0]["callsign"] == "K7ABC"
+    assert "guardrails" in planning.get_json()
+    assert deleted.get_json()["ok"] is True
