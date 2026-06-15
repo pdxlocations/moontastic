@@ -3,6 +3,10 @@
 Moontastic is a small Flask app for automated Meshtastic moonbounce-style link testing. It sends numbered test packets through a Meshtastic node, records received packets, derives TX/RX latency and packet-loss summaries, and exposes a planning dashboard plus JSON API.
 
 The app defaults to simulator mode so it can be developed without a radio attached. Optional serial, TCP/IP, and Bluetooth transports use the Python `meshtastic` package. The dashboard reception map uses Leaflet with OpenStreetMap tiles in the browser.
+<img width="2634" height="1396" alt="image" src="https://github.com/user-attachments/assets/64f49153-7a09-4480-8135-46a1b73211ba" />
+<img width="2592" height="1916" alt="image" src="https://github.com/user-attachments/assets/3e572e98-483b-4d5a-9f9f-b1a8ccbff9a4" />
+<img width="2616" height="1484" alt="image" src="https://github.com/user-attachments/assets/c058dd8f-61c0-4c4d-ba01-8d84c94e6644" />
+
 
 ## Quick Start
 
