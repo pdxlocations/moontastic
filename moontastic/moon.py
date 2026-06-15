@@ -44,6 +44,82 @@ def moon_prediction(station: Station, link: LinkBudget, now: datetime | None = N
     }
 
 
+def reception_probability_map(
+    station: Station,
+    link: LinkBudget,
+    now: datetime | None = None,
+    step_degrees: int = 10,
+) -> dict[str, Any]:
+    instant = normalize_time(now)
+    tx_track = moon_topocentric(station, instant)
+    tx_link = predict_link(tx_track, link)
+    step = max(5, min(30, int(step_degrees)))
+    points = []
+
+    for lat in range(-80, 81, step):
+        for lon in range(-180, 181, step):
+            rx_station = Station(latitude=float(lat), longitude=float(lon))
+            rx_track = moon_topocentric(rx_station, instant)
+            probability = reception_probability(tx_track, rx_track, tx_link)
+            points.append(
+                {
+                    "lat": lat,
+                    "lon": lon,
+                    "probability": probability,
+                    "moon_elevation_deg": rx_track["elevation_deg"],
+                    "visible": rx_track["visible"],
+                }
+            )
+
+    active = [point for point in points if point["probability"] > 0]
+    best = sorted(active, key=lambda point: point["probability"], reverse=True)[:8]
+    coverage = round(len([point for point in active if point["probability"] >= 0.5]) / len(points) * 100, 1)
+
+    return {
+        "generated_at": instant.isoformat(timespec="seconds"),
+        "station": {
+            "latitude": station.latitude,
+            "longitude": station.longitude,
+            "elevation_m": station.elevation_m,
+        },
+        "tx": {
+            "moon_elevation_deg": tx_track["elevation_deg"],
+            "moon_visible": tx_track["visible"],
+            "margin_db": tx_link["margin_db"],
+            "score": tx_link["score"],
+        },
+        "grid_step_degrees": step,
+        "coverage_percent": coverage,
+        "best": best,
+        "points": points,
+        "assumption": "Relative EME reception opportunity from shared Moon visibility, receiver elevation, and link-budget trend. It is calibrated for map planning, not a measured absolute probability, and does not include local noise, antenna aim, polarization, terrain, or station availability.",
+    }
+
+
+def reception_probability(tx_track: dict[str, Any], rx_track: dict[str, Any], tx_link: dict[str, Any]) -> float:
+    if not tx_track["visible"] or not rx_track["visible"]:
+        return 0.0
+
+    tx_elevation = float(tx_track["elevation_deg"])
+    rx_elevation = float(rx_track["elevation_deg"])
+    margin = float(tx_link["margin_db"]) - elevation_penalty_db(rx_elevation)
+    calibrated_margin = margin + 310
+    link_factor = 1 / (1 + math.exp(-calibrated_margin / 18))
+    tx_elevation_factor = elevation_factor(tx_elevation)
+    rx_elevation_factor = elevation_factor(rx_elevation)
+    return round(max(0.0, min(1.0, link_factor * tx_elevation_factor * rx_elevation_factor)), 3)
+
+
+def elevation_factor(elevation_deg: float) -> float:
+    if elevation_deg <= 0:
+        return 0.0
+    return max(0.1, min(1.0, elevation_deg / 35))
+
+
+def elevation_penalty_db(elevation_deg: float) -> float:
+    return 0 if elevation_deg >= 20 else max(0, 20 - max(elevation_deg, 0)) * 0.8
+
+
 def normalize_time(value: datetime | None) -> datetime:
     if value is None:
         return datetime.now(timezone.utc)
@@ -142,7 +218,7 @@ def predict_link(track: dict[str, Any], link: LinkBudget) -> dict[str, Any]:
     predicted_rx = link.tx_power_dbm + link.tx_gain_dbi + link.rx_gain_dbi - total_loss
     doppler_hz = -2 * float(track["radial_velocity_km_s"]) * 1000 / 299792458 * frequency_hz
     elevation = float(track["elevation_deg"])
-    elevation_penalty = 0 if elevation >= 20 else max(0, 20 - max(elevation, 0)) * 0.8
+    elevation_penalty = elevation_penalty_db(elevation)
     margin = predicted_rx - link.rx_sensitivity_dbm - elevation_penalty
     required_combined_gain = link.rx_sensitivity_dbm + total_loss + elevation_penalty - link.tx_power_dbm
     score = max(0, min(100, round((margin + 30) * 2)))

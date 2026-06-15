@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Moontastic</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -12,7 +13,14 @@
       <h1>Moontastic</h1>
       <p>Automated Meshtastic moonbounce test console</p>
     </div>
-    <div class="status" id="status">Loading</div>
+    <div class="topbar-actions">
+      <div class="theme-selector" id="theme-selector" aria-label="Display mode">
+        <button type="button" data-theme-option="light" aria-pressed="false">Light</button>
+        <button type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
+        <button type="button" data-theme-option="night" aria-pressed="false">Night</button>
+      </div>
+      <div class="status" id="status">Loading</div>
+    </div>
   </header>
 
   <main class="layout">
@@ -210,7 +218,35 @@
           <small>Next Set</small>
         </div>
       </div>
-      <div class="horizon" id="horizon"></div>
+      <div class="horizon-chart">
+        <div class="horizon" id="horizon"></div>
+      </div>
+      <div class="horizon-detail" id="horizon-detail">Select a horizon bar for time and elevation</div>
+    </section>
+
+    <section class="panel wide reception-panel">
+      <div class="section-head">
+        <h2>Reception Probability Map</h2>
+        <button type="button" class="ghost" id="reception-refresh-btn">Refresh</button>
+      </div>
+      <div class="map-wrap">
+        <div id="reception-map" class="reception-map" aria-label="Earth map of estimated reception probability"></div>
+      </div>
+      <div class="map-summary">
+        <div>
+          <span id="map-coverage">-</span>
+          <small>Likely Coverage</small>
+        </div>
+        <div>
+          <span id="map-tx-visibility">-</span>
+          <small>Your Moon View</small>
+        </div>
+        <div>
+          <span id="map-best">-</span>
+          <small>Best Grid Point</small>
+        </div>
+      </div>
+      <div class="map-detail" id="map-detail">Move over the map for estimated reception probability</div>
     </section>
 
     <section class="panel wide">
@@ -244,6 +280,7 @@
     </section>
   </main>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

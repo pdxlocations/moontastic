@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from moontastic.moon import LinkBudget, Station, moon_prediction
+from moontastic.moon import LinkBudget, Station, moon_prediction, reception_probability_map
 
 
 def test_moon_prediction_has_tracking_and_link_fields():
@@ -32,3 +32,19 @@ def test_link_margin_improves_with_more_antenna_gain():
     improved = moon_prediction(station, LinkBudget(tx_gain_dbi=20, rx_gain_dbi=20), when)
 
     assert improved["link"]["margin_db"] > base["link"]["margin_db"]
+
+
+def test_reception_probability_map_returns_bounded_grid():
+    result = reception_probability_map(
+        Station(latitude=45.5152, longitude=-122.6784),
+        LinkBudget(tx_gain_dbi=20, rx_gain_dbi=20),
+        datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc),
+        step_degrees=20,
+    )
+
+    assert result["grid_step_degrees"] == 20
+    assert result["points"]
+    assert 0 <= result["coverage_percent"] <= 100
+    assert "moon_visible" in result["tx"]
+    assert all(0 <= point["probability"] <= 1 for point in result["points"])
+    assert all(point["probability"] == 0 for point in result["points"] if not point["visible"])

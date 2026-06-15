@@ -7,7 +7,7 @@ from flask import Flask, jsonify, render_template, request
 from .config import load_config
 from .meshtastic_client import ConnectionManager, scan_ble_devices
 from .models import Database
-from .moon import LinkBudget, Station, moon_prediction
+from .moon import LinkBudget, Station, moon_prediction, reception_probability_map
 from .runner import TestRequest, TestRunner
 
 
@@ -85,6 +85,23 @@ def create_app() -> Flask:
             rx_sensitivity_dbm=float(request.args.get("rx_sensitivity_dbm", config.rx_sensitivity_dbm)),
         )
         return jsonify(moon_prediction(station, link))
+
+    @app.get("/api/reception-map")
+    def api_reception_map():
+        station = Station(
+            latitude=float(request.args.get("lat", config.station_latitude)),
+            longitude=float(request.args.get("lon", config.station_longitude)),
+            elevation_m=float(request.args.get("elevation_m", config.station_elevation_m)),
+        )
+        link = LinkBudget(
+            frequency_mhz=float(request.args.get("frequency_mhz", config.frequency_mhz)),
+            tx_power_dbm=float(request.args.get("tx_power_dbm", config.tx_power_dbm)),
+            tx_gain_dbi=float(request.args.get("tx_gain_dbi", config.tx_gain_dbi)),
+            rx_gain_dbi=float(request.args.get("rx_gain_dbi", config.rx_gain_dbi)),
+            rx_sensitivity_dbm=float(request.args.get("rx_sensitivity_dbm", config.rx_sensitivity_dbm)),
+        )
+        step = int(request.args.get("step_degrees", 10))
+        return jsonify(reception_probability_map(station, link, step_degrees=step))
 
     @app.get("/api/tests")
     def api_tests():

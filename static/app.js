@@ -10,6 +10,14 @@ const connectionState = document.querySelector("#connection-state");
 const connectionType = document.querySelector("#connection-type");
 const bleDeviceList = document.querySelector("#ble-device-list");
 const moonDot = document.querySelector("#moon-dot");
+const themeButtons = document.querySelectorAll("[data-theme-option]");
+const receptionMapEl = document.querySelector("#reception-map");
+const receptionFields = {
+  coverage: document.querySelector("#map-coverage"),
+  txVisibility: document.querySelector("#map-tx-visibility"),
+  best: document.querySelector("#map-best"),
+  detail: document.querySelector("#map-detail"),
+};
 const moonFields = {
   az: document.querySelector("#moon-az"),
   el: document.querySelector("#moon-el"),
@@ -26,6 +34,7 @@ const moonFields = {
   verdict: document.querySelector("#moon-verdict"),
   assumption: document.querySelector("#moon-assumption"),
   horizon: document.querySelector("#horizon"),
+  horizonDetail: document.querySelector("#horizon-detail"),
   eirp: document.querySelector("#pred-eirp"),
   totalLoss: document.querySelector("#pred-total-loss"),
   fspl: document.querySelector("#pred-fspl"),
@@ -37,6 +46,31 @@ const moonFields = {
 };
 
 let currentTestId = null;
+let latestReceptionMap = null;
+let lastReceptionMapAt = 0;
+let leafletMap = null;
+let receptionLayer = null;
+let stationLayer = null;
+const themeStorageKey = "moontastic-theme";
+
+function setTheme(theme) {
+  const nextTheme = ["light", "dark", "night"].includes(theme) ? theme : "light";
+  document.documentElement.dataset.theme = nextTheme;
+  for (const button of themeButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.themeOption === nextTheme));
+  }
+  localStorage.setItem(themeStorageKey, nextTheme);
+  renderReceptionMap(latestReceptionMap);
+}
+
+function initializeTheme() {
+  setTheme(localStorage.getItem(themeStorageKey) || "light");
+  for (const button of themeButtons) {
+    button.addEventListener("click", () => {
+      setTheme(button.dataset.themeOption);
+    });
+  }
+}
 
 function updateTransportFields() {
   const selected = connectionType.value;
@@ -147,6 +181,121 @@ function queryFromForm(form) {
   return new URLSearchParams(formPayload(form)).toString();
 }
 
+function initializeReceptionMap() {
+  if (!receptionMapEl) {
+    return;
+  }
+  if (typeof L === "undefined") {
+    receptionFields.detail.textContent = "Real map library unavailable. Check network access for Leaflet and OpenStreetMap tiles.";
+    return;
+  }
+
+  leafletMap = L.map(receptionMapEl, {
+    worldCopyJump: true,
+    minZoom: 2,
+    maxZoom: 8,
+  }).setView([20, 0], 2);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 8,
+  }).addTo(leafletMap);
+
+  receptionLayer = L.layerGroup().addTo(leafletMap);
+  stationLayer = L.layerGroup().addTo(leafletMap);
+}
+
+function probabilityColor(probability, opacity = null) {
+  const p = Math.max(0, Math.min(1, Number(probability)));
+  if (document.documentElement.dataset.theme === "night") {
+    const red = Math.round(96 + p * 159);
+    const green = Math.round(8 + p * 32);
+    const blue = Math.round(8 + p * 24);
+    const alpha = opacity ?? 0.16 + p * 0.58;
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+  const red = Math.round(239 * p + 45 * (1 - p));
+  const green = Math.round(68 * p + 212 * (1 - p));
+  const blue = Math.round(68 * p + 191 * (1 - p));
+  const alpha = opacity ?? 0.18 + p * 0.62;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function renderReceptionMap(map) {
+  if (!map || !leafletMap || !receptionLayer || !stationLayer) {
+    return;
+  }
+
+  receptionLayer.clearLayers();
+  stationLayer.clearLayers();
+
+  for (const point of map.points) {
+    if (point.probability <= 0) {
+      continue;
+    }
+    const probability = Math.round(point.probability * 100);
+    const marker = L.circleMarker([point.lat, point.lon], {
+      radius: 4 + point.probability * 12,
+      color: probabilityColor(point.probability, 0.95),
+      fillColor: probabilityColor(point.probability, 0.6),
+      fillOpacity: 0.62,
+      opacity: 0.95,
+      weight: 1,
+    });
+    marker.bindTooltip(`${probability}% estimate<br>${point.lat}, ${point.lon}<br>Moon ${point.moon_elevation_deg} deg`);
+    marker.on("mouseover click", () => updateReceptionDetail(point));
+    marker.addTo(receptionLayer);
+  }
+
+  L.circleMarker([map.station.latitude, map.station.longitude], {
+    radius: 9,
+    color: "#ffffff",
+    fillColor: probabilityColor(1, 0.95),
+    fillOpacity: 1,
+    opacity: 1,
+    weight: 2,
+  })
+    .bindTooltip("Your TX station")
+    .addTo(stationLayer);
+
+  leafletMap.invalidateSize();
+}
+
+function updateReceptionDetail(point) {
+  if (!point) {
+    return;
+  }
+  const probability = Math.round(point.probability * 100);
+  receptionFields.detail.textContent = `${point.lat}, ${point.lon} - ${probability}% reception estimate, Moon elevation ${point.moon_elevation_deg} deg`;
+}
+
+function updateReceptionSummary(map) {
+  receptionFields.coverage.textContent = `${map.coverage_percent}%`;
+  receptionFields.txVisibility.textContent = map.tx.moon_visible
+    ? `${map.tx.moon_elevation_deg} deg`
+    : "Below horizon";
+  if (map.best.length) {
+    const best = map.best[0];
+    receptionFields.best.textContent = `${Math.round(best.probability * 100)}% at ${best.lat}, ${best.lon}`;
+  } else {
+    receptionFields.best.textContent = "None";
+  }
+  receptionFields.detail.textContent = map.assumption;
+}
+
+async function refreshReceptionMap(force = false) {
+  const now = Date.now();
+  if (!force && latestReceptionMap && now - lastReceptionMapAt < 60000) {
+    return;
+  }
+  const form = document.querySelector("#moon-form");
+  const map = await requestJson(`/api/reception-map?${queryFromForm(form)}&step_degrees=10`);
+  latestReceptionMap = map;
+  lastReceptionMapAt = now;
+  updateReceptionSummary(map);
+  renderReceptionMap(map);
+}
+
 function positionMoonDot(moon) {
   const az = Number(moon.azimuth_deg);
   const el = Math.max(0, Math.min(90, Number(moon.elevation_deg)));
@@ -161,12 +310,27 @@ function positionMoonDot(moon) {
 
 function renderHorizon(samples = []) {
   moonFields.horizon.innerHTML = "";
+  moonFields.horizon.style.gridTemplateColumns = `repeat(${samples.length}, minmax(8px, 1fr))`;
+  moonFields.horizonDetail.textContent = "Select a horizon bar for time and elevation";
   for (const sample of samples) {
     const bar = document.createElement("div");
     const elevation = Math.max(0, Number(sample.elevation_deg));
+    const detail = `${fmtTime(sample.at)} - ${sample.elevation_deg} deg elevation${sample.visible ? " above horizon" : " below horizon"}`;
     bar.className = `horizon-bar${sample.visible ? " visible" : ""}`;
     bar.style.height = `${Math.max(4, elevation * 0.8)}px`;
-    bar.title = `${sample.at} ${sample.elevation_deg} deg`;
+    bar.tabIndex = 0;
+    bar.setAttribute("role", "button");
+    bar.setAttribute("aria-label", detail);
+    bar.dataset.detail = detail;
+    bar.addEventListener("mouseenter", () => {
+      moonFields.horizonDetail.textContent = detail;
+    });
+    bar.addEventListener("focus", () => {
+      moonFields.horizonDetail.textContent = detail;
+    });
+    bar.addEventListener("click", () => {
+      moonFields.horizonDetail.textContent = detail;
+    });
     moonFields.horizon.append(bar);
   }
 }
@@ -234,6 +398,7 @@ async function refreshStatus() {
   await refreshTests();
   await loadTest(currentTestId);
   await refreshMoon();
+  await refreshReceptionMap();
 }
 
 function describeConnection(info) {
@@ -338,11 +503,21 @@ document.querySelector("#ble-scan-btn").addEventListener("click", async () => {
 });
 
 document.querySelector("#moon-refresh-btn").addEventListener("click", () => {
-  refreshMoon().catch(showError);
+  refreshMoon().then(() => refreshReceptionMap(true)).catch(showError);
 });
 
 document.querySelector("#moon-form").addEventListener("change", () => {
-  refreshMoon().catch(showError);
+  refreshMoon().then(() => refreshReceptionMap(true)).catch(showError);
+});
+
+document.querySelector("#reception-refresh-btn").addEventListener("click", () => {
+  refreshReceptionMap(true).catch(showError);
+});
+
+window.addEventListener("resize", () => {
+  if (leafletMap) {
+    leafletMap.invalidateSize();
+  }
 });
 
 document.querySelector("#send-form").addEventListener("submit", async (event) => {
@@ -359,6 +534,8 @@ document.querySelector("#send-form").addEventListener("submit", async (event) =>
   }
 });
 
+initializeTheme();
+initializeReceptionMap();
 updateTransportFields();
 refreshStatus().catch(showError);
 setInterval(() => refreshStatus().catch(showError), 3000);

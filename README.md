@@ -1,8 +1,8 @@
 # Moontastic
 
-Moontastic is a small Flask app for automated Meshtastic moonbounce-style link testing. It sends numbered test packets through a Meshtastic node, records received packets and acknowledgements, and exposes a simple dashboard plus JSON API.
+Moontastic is a small Flask app for automated Meshtastic moonbounce-style link testing. It sends numbered test packets through a Meshtastic node, records received packets, derives TX/RX latency and packet-loss summaries, and exposes a dashboard plus JSON API.
 
-The app defaults to simulator mode so it can be developed without a radio attached.
+The app defaults to simulator mode so it can be developed without a radio attached. Optional serial, TCP/IP, and Bluetooth transports use the Python `meshtastic` package. The dashboard reception map uses Leaflet with OpenStreetMap tiles in the browser.
 
 ## Quick Start
 
@@ -14,6 +14,12 @@ flask --app app run --debug
 ```
 
 Open `http://127.0.0.1:5000`.
+
+Run the test suite with:
+
+```bash
+python -m pytest
+```
 
 ## Configuration
 
@@ -57,15 +63,25 @@ MOONTASTIC_INTERFACE=ble MOONTASTIC_BLE_ADDRESS=Meshtastic_1234 flask --app app 
 ## API
 
 - `GET /api/status` - current runner and interface status
-- `POST /api/connection` - connect using simulator, TCP/IP, serial, or Bluetooth
+- `POST /api/connection` - connect using simulator, TCP/IP, serial, or Bluetooth. Body fields: `type`, `tcp_host`, `serial_port`, `ble_address`
 - `POST /api/connection/disconnect` - close the active interface
 - `GET /api/connection/ble/scan` - scan for Meshtastic BLE peripherals
-- `GET /api/moon` - live Moon pointing and reception prediction
+- `GET /api/moon` - live Moon pointing and reception prediction. Query fields: `lat`, `lon`, `elevation_m`, `frequency_mhz`, `tx_power_dbm`, `tx_gain_dbi`, `rx_gain_dbi`, `rx_sensitivity_dbm`
+- `GET /api/reception-map` - global relative EME reception-opportunity grid. Uses the same query fields as `/api/moon`, plus optional `step_degrees`
 - `POST /api/tests` - start an automated test
 - `POST /api/tests/current/stop` - stop the active test
 - `GET /api/tests` - recent tests
 - `GET /api/tests/<id>` - test details and packets
-- `POST /api/send` - send a one-off text packet
+- `POST /api/send` - send a one-off text packet. Body fields: `text`, `target`, `channel`, `want_ack`
+
+Example connection request:
+
+```json
+{
+  "type": "tcp",
+  "tcp_host": "192.168.1.50"
+}
+```
 
 Example test request:
 
@@ -79,5 +95,16 @@ Example test request:
   "packet_count": 10,
   "timeout_seconds": 20,
   "payload_prefix": "MOON"
+}
+```
+
+Example manual packet request:
+
+```json
+{
+  "text": "MOON N0CALL manual check",
+  "target": "^all",
+  "channel": 0,
+  "want_ack": true
 }
 ```
