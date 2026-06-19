@@ -19,6 +19,14 @@ flask --app app run --debug
 
 Open `http://127.0.0.1:5000`.
 
+With Docker Compose:
+
+```bash
+docker compose up
+```
+
+Open `http://127.0.0.1:8080`. The compose setup defaults to simulator mode and persists the SQLite database in the `moontastic-data` Docker volume. Set `MOONTASTIC_PORT=5000` or another host port before `docker compose up` if you want a different local URL.
+
 Run the test suite with:
 
 ```bash

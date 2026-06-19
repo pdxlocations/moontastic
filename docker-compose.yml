@@ -1,0 +1,23 @@
+services:
+  moontastic:
+    build: .
+    ports:
+      - "${MOONTASTIC_PORT:-8080}:5000"
+    environment:
+      MOONTASTIC_INTERFACE: "${MOONTASTIC_INTERFACE:-sim}"
+      MOONTASTIC_DB: "${MOONTASTIC_DB:-/data/moontastic.sqlite3}"
+      MOONTASTIC_SECRET: "${MOONTASTIC_SECRET:-change-me}"
+      MOONTASTIC_LAT: "${MOONTASTIC_LAT:-45.5152}"
+      MOONTASTIC_LON: "${MOONTASTIC_LON:--122.6784}"
+      MOONTASTIC_ELEVATION_M: "${MOONTASTIC_ELEVATION_M:-50}"
+      MOONTASTIC_FREQ_MHZ: "${MOONTASTIC_FREQ_MHZ:-144}"
+      MOONTASTIC_TX_POWER_DBM: "${MOONTASTIC_TX_POWER_DBM:-30}"
+      MOONTASTIC_TX_GAIN_DBI: "${MOONTASTIC_TX_GAIN_DBI:-12}"
+      MOONTASTIC_RX_GAIN_DBI: "${MOONTASTIC_RX_GAIN_DBI:-12}"
+      MOONTASTIC_RX_SENSITIVITY_DBM: "${MOONTASTIC_RX_SENSITIVITY_DBM:--137}"
+    volumes:
+      - moontastic-data:/data
+    restart: unless-stopped
+
+volumes:
+  moontastic-data:

@@ -670,6 +670,19 @@ tbody tr:hover {
   min-height: 20px;
 }
 
+.site-footer {
+  max-width: 1480px;
+  margin: 0 auto 28px;
+  padding: 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.site-footer a {
+  color: var(--accent-strong);
+}
+
 .listener-form {
   display: grid;
   grid-template-columns: repeat(6, minmax(120px, 1fr)) auto;
