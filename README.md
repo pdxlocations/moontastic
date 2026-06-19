@@ -25,7 +25,7 @@ With Docker Compose:
 docker compose up
 ```
 
-Open `http://127.0.0.1:8080` on this computer, or `http://<this-computer-lan-ip>:8080` from another computer on the same network. The compose setup publishes host port `8080` to container port `5000`, defaults to simulator mode, and persists the SQLite database in the `moontastic-data` Docker volume.
+Open `http://127.0.0.1:5043` on this computer, or `http://<this-computer-lan-ip>:5043` from another computer on the same network. The compose setup publishes host port `5043` to container port `5000`, defaults to simulator mode, and persists the SQLite database in the `moontastic-data` Docker volume.
 
 Set `MOONTASTIC_PORT=5000` or another host port before `docker compose up` if you want a different local URL:
 
