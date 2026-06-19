@@ -14,10 +14,10 @@ The app defaults to simulator mode so it can be developed without a radio attach
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-flask --app app run --debug
+flask --app app run --debug --host 0.0.0.0 --port 5000
 ```
 
-Open `http://127.0.0.1:5000`.
+Open `http://127.0.0.1:5000` on this computer, or `http://<this-computer-lan-ip>:5000` from another computer on the same network.
 
 With Docker Compose:
 
@@ -25,7 +25,13 @@ With Docker Compose:
 docker compose up
 ```
 
-Open `http://127.0.0.1:8080`. The compose setup defaults to simulator mode and persists the SQLite database in the `moontastic-data` Docker volume. Set `MOONTASTIC_PORT=5000` or another host port before `docker compose up` if you want a different local URL.
+Open `http://127.0.0.1:8080` on this computer, or `http://<this-computer-lan-ip>:8080` from another computer on the same network. The compose setup publishes host port `8080` to container port `5000`, defaults to simulator mode, and persists the SQLite database in the `moontastic-data` Docker volume.
+
+Set `MOONTASTIC_PORT=5000` or another host port before `docker compose up` if you want a different local URL:
+
+```bash
+MOONTASTIC_PORT=5000 docker compose up
+```
 
 Run the test suite with:
 
@@ -57,19 +63,19 @@ MOONTASTIC_RX_SENSITIVITY_DBM=-137
 For serial hardware:
 
 ```bash
-MOONTASTIC_INTERFACE=serial MOONTASTIC_SERIAL_PORT=/dev/ttyUSB0 flask --app app run
+MOONTASTIC_INTERFACE=serial MOONTASTIC_SERIAL_PORT=/dev/ttyUSB0 flask --app app run --host 0.0.0.0 --port 5000
 ```
 
 For TCP hardware:
 
 ```bash
-MOONTASTIC_INTERFACE=tcp MOONTASTIC_TCP_HOST=192.168.1.50 flask --app app run
+MOONTASTIC_INTERFACE=tcp MOONTASTIC_TCP_HOST=192.168.1.50 flask --app app run --host 0.0.0.0 --port 5000
 ```
 
 For Bluetooth hardware:
 
 ```bash
-MOONTASTIC_INTERFACE=ble MOONTASTIC_BLE_ADDRESS=Meshtastic_1234 flask --app app run
+MOONTASTIC_INTERFACE=ble MOONTASTIC_BLE_ADDRESS=Meshtastic_1234 flask --app app run --host 0.0.0.0 --port 5000
 ```
 
 ## API

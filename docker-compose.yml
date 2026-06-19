@@ -2,7 +2,7 @@ services:
   moontastic:
     build: .
     ports:
-      - "${MOONTASTIC_PORT:-8080}:5000"
+      - "0.0.0.0:${MOONTASTIC_PORT:-8080}:5000"
     environment:
       MOONTASTIC_INTERFACE: "${MOONTASTIC_INTERFACE:-sim}"
       MOONTASTIC_DB: "${MOONTASTIC_DB:-/data/moontastic.sqlite3}"
